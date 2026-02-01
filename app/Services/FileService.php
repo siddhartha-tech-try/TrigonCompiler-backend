@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\IdeSession;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
+use Illuminate\Support\Facades\Log;
 
 class FileService
 {
@@ -84,7 +85,8 @@ class FileService
         $fullPath = $this->resolvePath($session, $path);
 
         if (File::exists($fullPath)) {
-            throw new RuntimeException('File or directory already exists');
+            // throw new RuntimeException('File or directory already exists');
+            return;
         }
 
         if ($isDirectory) {
@@ -105,8 +107,12 @@ class FileService
         if (!File::exists($fullPath) || !File::isFile($fullPath)) {
             throw new RuntimeException('File not found');
         }
+        $result = File::put($fullPath, $content);
+        Log::info('FILE CHECKSUM', [
+            'written_path' => $fullPath,
+            'hash' => md5_file($fullPath),
+        ]);
 
-        File::put($fullPath, $content);
     }
 
     /* ======================

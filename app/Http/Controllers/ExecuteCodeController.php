@@ -46,7 +46,8 @@ class ExecuteCodeController extends Controller
             app(CodeExecutor::class)->executeStream(
                 $request->language,
                 $workspace,
-                $request->input('stdin', '')
+                // $request->input('stdin', '')
+                (string) ($request->input('stdin') ?? '')
             );
         }, 200, [
             'Content-Type' => 'text/event-stream',

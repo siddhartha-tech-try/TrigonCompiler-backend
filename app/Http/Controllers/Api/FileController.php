@@ -14,7 +14,11 @@ use Illuminate\Support\Facades\Log;
 class FileController extends Controller
 {
     private function session(Request $request): IdeSession
-    {
+    {   
+        // Log::info('IDE COOKIE', [
+        //     'cookie' => $request->cookie('ide_session'),
+        //     'exists' => IdeSession::where('id', $request->cookie('ide_session'))->exists(),
+        // ]);
         return IdeSession::findOrFail($request->cookie('ide_session'));
     }
 
@@ -66,11 +70,6 @@ class FileController extends Controller
             'path' => 'required|string',
             'content' => 'required|string',
         ]);
-
-        dd($this->session($request), $request->path, $request->content);
-        Log::info($this->session($request));
-        Log::info($request->path);
-        Log::info($request->content);
 
         $service->update(
             $this->session($request),

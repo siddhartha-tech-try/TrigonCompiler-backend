@@ -6,6 +6,8 @@ use App\Models\IdeSession;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
 use App\Services\Workspace\WorkspaceGuard;
+use Illuminate\Support\Facades\Log;
+use App\Models\ProgrammingLanguage;
 
 
 class CodeExecutor
@@ -20,8 +22,8 @@ class CodeExecutor
             throw new RuntimeException("Execution not supported for {$language}");
         }
 
-        $guard = app(WorkspaceGuard::class);
-        $guard->ensureEntryFileExists($lang, $workspace);
+        // $guard = app(WorkspaceGuard::class);
+        // $guard->ensureEntryFileExists($lang, $workspace);
 
         $dockerCmd = [
             'docker run --rm',
@@ -42,9 +44,8 @@ class CodeExecutor
         $lang = ProgrammingLanguage::where('language_name', $language)
             ->where('is_active', true)
             ->firstOrFail();
-
-        app(WorkspaceGuard::class)
-            ->ensureEntryFileExists($lang, $workspace);
+        // app(WorkspaceGuard::class)
+        //     ->ensureEntryFileExists($lang, $workspace);
 
         $cmd = implode(' ', [
             'docker run --rm',
@@ -72,7 +73,7 @@ class CodeExecutor
         stream_set_blocking($pipes[2], false);
 
         $start = microtime(true);
-        $timeout = 5;
+        $timeout = 60;
 
         while (true) {
             $read = [$pipes[1], $pipes[2]];
@@ -84,6 +85,7 @@ class CodeExecutor
                 $chunk = fread($stream, 8192);
                 if ($chunk !== false && $chunk !== '') {
                     $type = ($stream === $pipes[1]) ? 'stdout' : 'stderr';
+                    Log::info("[EXEC {$type}] " . $chunk);
                     echo "event: {$type}\n";
                     echo 'data: ' . json_encode($chunk) . "\n\n";
                     ob_flush();
@@ -113,48 +115,6 @@ class CodeExecutor
         flush();
     }
 
-
-
-    // private function image($language)
-    // {
-    //     return match ($language) {
-    //         'python' => 'python:3.11-alpine',
-    //         'node'   => 'node:20-alpine',
-    //         'java'   => 'openjdk:21-slim'
-    //     };
-    // }
-
-    // private function runProcess($cmd, $stdin)
-    // {
-    //     $process = proc_open(
-    //         $cmd,
-    //         [
-    //             0 => ['pipe', 'r'],
-    //             1 => ['pipe', 'w'],
-    //             2 => ['pipe', 'w']
-    //         ],
-    //         $pipes
-    //     );
-
-    //     fwrite($pipes[0], $stdin);
-    //     fclose($pipes[0]);
-
-    //     $stdout = stream_get_contents($pipes[1]);
-    //     $stderr = stream_get_contents($pipes[2]);
-
-    //     fclose($pipes[1]);
-    //     fclose($pipes[2]);
-
-    //     $exitCode = proc_close($process);
-
-    //     return [
-    //         'stdout' => $stdout,
-    //         'stderr' => $stderr,
-    //         'exitCode' => $exitCode
-    //     ];
-    // }
-
-
     private function runProcess($cmd, $stdin)
     {
         $descriptorspec = [
@@ -178,7 +138,7 @@ class CodeExecutor
         $stdout = '';
         $stderr = '';
         $start = microtime(true);
-        $timeout = 5; // seconds
+        $timeout = 60; // seconds
 
         while (true) {
             $stdout .= stream_get_contents($pipes[1]);
