@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Services\CodeExecutor;
+use Illuminate\Support\Facades\Log;
 
 class ExecuteCodeController extends Controller
 {

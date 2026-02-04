@@ -19,9 +19,11 @@ class ProgrammingLanguage extends Model
         'execution_type',
         'website',
         'is_active',
+        'stdin_error_patterns',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'stdin_error_patterns' => 'array',
     ];
 }

@@ -41,14 +41,18 @@ class CodeExecutor
 
     public function executeStream(string $language, string $workspace, string $stdin): void
     {
+        $hasOutput = false;
+        $stderrBuffer = '';
+
         $lang = ProgrammingLanguage::where('language_name', $language)
             ->where('is_active', true)
             ->firstOrFail();
-        // app(WorkspaceGuard::class)
-        //     ->ensureEntryFileExists($lang, $workspace);
+
+        // Load stdin error patterns from DB (JSON column)
+        $stdinErrorPatterns = $lang->stdin_error_patterns ?? [];
 
         $cmd = implode(' ', [
-            'docker run --rm',
+            'docker run --rm -i',
             '--network none',
             '--memory=256m',
             '--cpus=0.5',
@@ -67,13 +71,13 @@ class CodeExecutor
         $process = proc_open($cmd, $descriptors, $pipes);
 
         fwrite($pipes[0], $stdin);
-        fclose($pipes[0]);
+        fclose($pipes[0]); // EOF after upfront input (batch mode)
 
         stream_set_blocking($pipes[1], false);
         stream_set_blocking($pipes[2], false);
 
         $start = microtime(true);
-        $timeout = 60;
+        $timeout = 5; // ⏱ execution timeout (safe now)
 
         while (true) {
             $read = [$pipes[1], $pipes[2]];
@@ -83,9 +87,18 @@ class CodeExecutor
 
             foreach ($read as $stream) {
                 $chunk = fread($stream, 8192);
+
                 if ($chunk !== false && $chunk !== '') {
+                    $hasOutput = true;
+
                     $type = ($stream === $pipes[1]) ? 'stdout' : 'stderr';
+
+                    if ($type === 'stderr') {
+                        $stderrBuffer .= $chunk; // 🔑 collect stderr
+                    }
+
                     Log::info("[EXEC {$type}] " . $chunk);
+
                     echo "event: {$type}\n";
                     echo 'data: ' . json_encode($chunk) . "\n\n";
                     ob_flush();
@@ -100,7 +113,17 @@ class CodeExecutor
 
             if ((microtime(true) - $start) > $timeout) {
                 proc_terminate($process, 9);
-                echo "event: error\ndata: \"Execution timed out\"\n\n";
+
+                if (!$hasOutput) {
+                    echo "event: system\n";
+                    echo "data: " . json_encode(['Program is waiting for input. Please provide input before running.']) . "\n\n";
+                } else {
+                    echo "event: system\n";
+                    echo "data: " . json_encode(['Execution exceeded time limit.']) . "\n\n";
+                }
+
+                ob_flush();
+                flush();
                 break;
             }
         }
@@ -109,6 +132,25 @@ class CodeExecutor
         fclose($pipes[2]);
 
         $exitCode = proc_close($process);
+
+        /*
+        |---------------------------------------
+        | Post-execution stdin error detection
+        |---------------------------------------
+        */
+        $isInputError = false;
+
+        foreach ($stdinErrorPatterns as $pattern) {
+            if ($pattern && str_contains($stderrBuffer, $pattern)) {
+                $isInputError = true;
+                break;
+            }
+        }
+
+        if ($isInputError) {
+            echo "event: system\n";
+            echo "data: " . json_encode(['Program expects input. Please provide input before running.']) . "\n\n";
+        }
 
         echo "event: done\ndata: {$exitCode}\n\n";
         ob_flush();
@@ -150,10 +192,13 @@ class CodeExecutor
             }
 
             if ((microtime(true) - $start) > $timeout) {
+                $isLikelyInputWait = trim($stdout) === '' && trim($stderr) === '';
                 proc_terminate($process, 9);
                 return [
                     'stdout' => '',
-                    'stderr' => 'Execution timed out',
+                    'stderr' => $isLikelyInputWait
+                        ? 'Program is waiting for input. Please provide input before running.'
+                        : 'Execution exceeded time limit.',
                     'exitCode' => null
                 ];
             }
