@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'interactive_gateway' => [
+        'token' => env('INTERACTIVE_GATEWAY_TOKEN'),
+        'url' => env('INTERACTIVE_GATEWAY_URL'),
+    ],
+
+
 ];

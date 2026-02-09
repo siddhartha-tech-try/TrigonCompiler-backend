@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Services\CodeExecutor;
 use Illuminate\Support\Facades\Log;
+use App\Models\ProgrammingLanguage;
+use Illuminate\Support\Facades\Http;
 
 class ExecuteCodeController extends Controller
 {
@@ -57,4 +59,38 @@ class ExecuteCodeController extends Controller
             'X-Accel-Buffering' => 'no',
         ]);
     }
+
+    public function interactive(Request $request)
+    {
+        $sessionId = $request->cookie('ide_session');
+        abort_if(!$sessionId, 403);
+
+        $request->validate([
+            'language' => 'required|string',
+        ]);
+
+        $lang = ProgrammingLanguage::where('language_name', $request->language)
+            ->where('is_active', true)
+            ->firstOrFail();
+
+        $workspace = storage_path("workspaces/{$sessionId}");
+
+        $response = Http::withHeaders([
+            'X-Internal-Token' => config('services.interactive_gateway.token'),
+        ])->post(config('services.interactive_gateway.url') . '/interactive/sessions', [
+            'session_id' => $sessionId,
+            'workspace_path' => $workspace,
+            'language' => $lang->language_name,
+            'container_image' => $lang->container_image,
+            'run_command' => $lang->run_command,
+        ]);
+
+        if (!$response->successful()) {
+            Log::error($response->body());
+            return response()->json(['error' => 'Failed to start interactive session'], 500);
+        }
+
+        return response()->json($response->json());
+    }
+
 }

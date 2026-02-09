@@ -26,3 +26,6 @@ Route::get('/languages', [ProgrammingLanguageController::class, 'index']);
 
 Route::post('/execute/stream', [ExecuteCodeController::class, 'stream']);
 
+Route::post('/execute/interactive', [ExecuteCodeController::class, 'interactive']);
+
+
