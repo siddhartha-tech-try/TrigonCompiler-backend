@@ -70,4 +70,58 @@ class SessionController extends Controller
             );
 
     }
+
+    public function cleanup(Request $request)
+    {
+        $sessionId = $request->cookie('ide_session');
+
+        if (!$sessionId) {
+            // Nothing to clean
+            return response()->json(['status' => 'no_session']);
+        }
+
+        $session = IdeSession::find($sessionId);
+
+        if (!$session) {
+            return response()->json(['status' => 'not_found']);
+        }
+
+        // 🔁 Idempotency: already cleaned
+        if ($session->status === 'ended') {
+            return response()->json(['status' => 'already_ended']);
+        }
+
+        // 1️⃣ Mark session ended
+        $session->update([
+            'status' => 'ended',
+            'ended_at' => now(),
+        ]);
+
+        // 2️⃣ Delete workspace (best effort)
+        try {
+            if ($session->workspace_path && is_dir($session->workspace_path)) {
+                \Illuminate\Support\Facades\File::deleteDirectory(
+                    $session->workspace_path
+                );
+            }
+        } catch (\Throwable $e) {
+            // Log but don't fail cleanup
+            \Illuminate\Support\Facades\Log::warning(
+                '[v0] Workspace cleanup failed',
+                [
+                    'session_id' => $sessionId,
+                    'error' => $e->getMessage(),
+                ]
+            );
+        }
+
+        // 3️⃣ Emit event
+        SessionEvent::create([
+            'session_id' => $session->id,
+            'event_type' => 'session_ended',
+        ]);
+
+        return response()->json(['status' => 'cleaned']);
+    }
+
 }

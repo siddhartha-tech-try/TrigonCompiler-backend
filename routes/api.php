@@ -23,6 +23,7 @@ Route::put('/files', [FileController::class, 'update']);
 Route::delete('/files', [FileController::class, 'delete']);
 
 Route::get('/languages', [ProgrammingLanguageController::class, 'index']);
+Route::post('/sessions/cleanup', [SessionController::class, 'cleanup']);
 
 Route::post('/execute/stream', [ExecuteCodeController::class, 'stream']);
 
